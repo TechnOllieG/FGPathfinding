@@ -54,14 +54,27 @@ public:
 	/** The grid lines width in units */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	float GridLineWidth = 50.f;
+
+	UFUNCTION(BlueprintCallable)
+	void GetNeighbors(int CurrentGridIndex, TArray<int>& OutNeighbors);
 	
 #if WITH_EDITOR
 	// When any properties is changed on this actor
 	virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
 #endif
 
-private:
+	UFUNCTION(BlueprintCallable)
 	void GenerateGrid();
+
+private:
+	/** Will return the middle index of the grid (if the width/length of the grid is even it will return the top right middle when looking straight at the grid with grid point with index 0 in the bottom left */
+	int GetMiddleIndex() const;
+	
+	/** Will check if the input index is valid, if not, will return -1 */
+	int CheckValidIndex(int Input) const;
+
+	/** If input is a valid index, will return true */
+	bool IsValidIndex(int Input) const;
 
 	UPROPERTY(Transient)
 	AActor* GridLines;
@@ -69,6 +82,12 @@ private:
 	UPROPERTY(Transient)
 	AActor* GridPlane;
 
+	UPROPERTY(Transient)
+	UTexture2D* GridPlaneTexture;
+
 	UPROPERTY()
 	UMaterialInstanceDynamic* LineMaterial;
+
+	UPROPERTY()
+	UMaterialInstanceDynamic* PlaneMaterial;
 };
