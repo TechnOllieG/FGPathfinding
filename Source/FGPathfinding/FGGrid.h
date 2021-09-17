@@ -14,15 +14,24 @@ public:
 	virtual void BeginPlay() override;
 	// When actor is placed in level, gets called again when transform is changed
 	virtual void OnConstruction(const FTransform& Transform) override;
+	virtual void Tick(float DeltaSeconds) override;
+
+#if WITH_EDITOR
+	// When any properties is changed on this actor
+	virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
+#endif
+
+	UFUNCTION(BlueprintCallable)
+	void GenerateGrid();
+
+	UFUNCTION(BlueprintCallable)
+	void DebugDrawGridIndices();
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
 	USceneComponent* SceneRoot;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
 	UStaticMeshComponent* GridLineComponent;
-
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
-	UStaticMeshComponent* GridPlaneComponent;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	int GridWidth = 1;
@@ -37,13 +46,17 @@ public:
 	float GridLineOffset = 0.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
-	UStaticMesh* PlaneMesh;
+	bool DrawDebugIndices = false;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	FLinearColor DrawDebugColor;
+
+	/** This is the plane mesh that the grid line material will be applied to */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	UStaticMesh* PlaneMesh;
+	
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	UMaterial* GridLineMaterial;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly)
-	UMaterial* GridPlaneMaterial;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
 	TArray<FVector> GridPoints;
@@ -55,20 +68,21 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	float GridLineWidth = 50.f;
 
+	/** Gets neighbors to the input grid point. Diagonals can be given if wanted, -1 in the output array = there is no valid neighbor in that direction */
 	UFUNCTION(BlueprintCallable)
-	void GetNeighbors(int CurrentGridIndex, TArray<int>& OutNeighbors);
-	
-#if WITH_EDITOR
-	// When any properties is changed on this actor
-	virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
-#endif
+	void GetNeighbors(int CurrentGridIndex, TArray<int>& OutNeighbors, bool IncludeDiagonals = true);
 
+	/** Gets the closest grid index to a given world location */
 	UFUNCTION(BlueprintCallable)
-	void GenerateGrid();
+	int GetClosestIndex(FVector WorldLocation);
+
+	/** Checks if grid array is valid with the current settings for the grid, can optionally regenerate the grid if not */
+	UFUNCTION(BlueprintCallable)
+	bool IsGridGenerationValid(bool RegenerateGridIfNot = false);
 
 private:
 	/** Will return the middle index of the grid (if the width/length of the grid is even it will return the top right middle when looking straight at the grid with grid point with index 0 in the bottom left */
-	int GetMiddleIndex() const;
+	int GetMiddleIndex();
 	
 	/** Will check if the input index is valid, if not, will return -1 */
 	int CheckValidIndex(int Input) const;
@@ -79,15 +93,6 @@ private:
 	UPROPERTY(Transient)
 	AActor* GridLines;
 
-	UPROPERTY(Transient)
-	AActor* GridPlane;
-
-	UPROPERTY(Transient)
-	UTexture2D* GridPlaneTexture;
-
 	UPROPERTY()
 	UMaterialInstanceDynamic* LineMaterial;
-
-	UPROPERTY()
-	UMaterialInstanceDynamic* PlaneMaterial;
 };

@@ -1,11 +1,14 @@
 ﻿#include "FGGrid.h"
 
+#include "Kismet/KismetSystemLibrary.h"
+
 DEFINE_LOG_CATEGORY(LogGrid);
 
 AFGGrid::AFGGrid()
 {
 	SceneRoot = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
 	RootComponent = SceneRoot;
+	PrimaryActorTick.bCanEverTick = true;
 }
 
 void AFGGrid::BeginPlay()
@@ -18,6 +21,14 @@ void AFGGrid::OnConstruction(const FTransform& Transform)
 	Super::OnConstruction(Transform);
 
 	GenerateGrid();
+}
+
+void AFGGrid::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+
+	if(DrawDebugIndices)
+		DebugDrawGridIndices();
 }
 
 #if WITH_EDITOR
@@ -96,63 +107,20 @@ void AFGGrid::GenerateGrid()
 			
 		LineMaterial->SetScalarParameterValue(TEXT("LineWidth"), InputLineWidth);
 	}
-	return;
+}
 
-	if(GridPlaneMaterial)
+void AFGGrid::DebugDrawGridIndices()
+{
+	for(int i = 0; i < GridPoints.Num(); i++)
 	{
-		if(!GridPlaneComponent)
-		{
-			GridPlaneComponent = NewObject<UStaticMeshComponent>(this, UStaticMeshComponent::StaticClass(), TEXT("GridPlaneComponent"));
-			AddInstanceComponent(GridPlaneComponent);
-			GridPlaneComponent->AttachToComponent(RootComponent, FAttachmentTransformRules(EAttachmentRule::KeepWorld, false));
-			GridPlaneComponent->SetCollisionProfileName(TEXT("NoCollision"));
-			GridPlaneComponent->SetStaticMesh(PlaneMesh);
-		}
-
-		if(!PlaneMaterial)
-			PlaneMaterial = GridPlaneComponent->CreateAndSetMaterialInstanceDynamicFromMaterial(0, GridPlaneMaterial);
-		
-		if(!GridPlaneTexture || GridPlaneTexture->GetSizeX() != GridWidth || GridPlaneTexture->GetSizeY() != GridHeight)
-		{
-			GridPlaneTexture = UTexture2D::CreateTransient(GridWidth, GridHeight);
-
-			uint8* Pixels = new uint8[GridWidth * GridHeight * 4];
-			for (int y = 0; y < GridHeight; y++)
-			{
-				for (int x = 0; x < GridWidth; x++)
-				{
-					int PixelIndex = y * GridWidth + x;
-					Pixels[4 * PixelIndex] = PixelIndex % 2 == 0 * 255;
-					Pixels[4 * PixelIndex + 1] = PixelIndex % 2 == 0 * 255;
-					Pixels[4 * PixelIndex + 2] = PixelIndex % 2 == 0 * 255;
-					Pixels[4 * PixelIndex + 3] = 255;
-				}
-			}
-
-			FTexture2DMipMap& Mip = GridPlaneTexture->PlatformData->Mips[0];
-			
-			Mip.BulkData.Lock(LOCK_READ_WRITE);
-			uint8* TextureData = (uint8*) Mip.BulkData.Realloc(GridWidth * GridHeight * 4);
-			FMemory::Memcpy(TextureData, Pixels, sizeof(uint8) * GridWidth * GridHeight * 4);
-			Mip.BulkData.Unlock();
-
-			delete[] Pixels;
-		}
-
-		const float LengthX = GridWidth * GridPointScale;
-		const float LengthY = GridHeight * GridPointScale;
-		
-		// Assumes the grid plane plane mesh has a size of 100x100 units at 1x1x1 scale.
-		GridPlaneComponent->SetRelativeScale3D(FVector(LengthX * 0.01f, LengthY * 0.01f, 1.f));
-
-		PlaneMaterial->SetTextureParameterValue(TEXT("GridTexture"), GridPlaneTexture);
+		UKismetSystemLibrary::DrawDebugString(this, GridPoints[i], FString::FromInt(i), nullptr, DrawDebugColor);
 	}
 }
 
-int AFGGrid::GetMiddleIndex() const
+int AFGGrid::GetMiddleIndex()
 {
-	const int HalfWidth = GridWidth / 2;
-	const int HalfHeight = GridHeight / 2;
+	int HalfWidth = GridWidth * 0.5f;
+	int HalfHeight = GridHeight * 0.5f;
 			
 	return HalfWidth + HalfHeight * GridWidth;
 }
@@ -170,11 +138,16 @@ bool AFGGrid::IsValidIndex(int Input) const
 	return CheckValidIndex(Input) >= 0;
 }
 
-void AFGGrid::GetNeighbors(int CurrentGridIndex, TArray<int>& OutNeighbors)
+bool AFGGrid::IsGridGenerationValid(bool RegenerateGridIfNot)
+{
+	return GridPoints.Num() == GridWidth * GridHeight && GridPoints.Num() > 1 ? FMath::IsNearlyEqual(FVector::DistSquared(GridPoints[0], GridPoints[1]), FMath::Square(GridPointScale)) : true;
+}
+
+void AFGGrid::GetNeighbors(int CurrentGridIndex, TArray<int>& OutNeighbors, bool IncludeDiagonals)
 {
 	const int Num = GridPoints.Num();
 
-	if(IsValidIndex(CurrentGridIndex))
+	if(!IsValidIndex(CurrentGridIndex))
 	{
 		UE_LOG(LogGrid, Warning, TEXT("Couldn't get neighbors since current index is invalid"));
 		return;
@@ -184,13 +157,47 @@ void AFGGrid::GetNeighbors(int CurrentGridIndex, TArray<int>& OutNeighbors)
 	OutNeighbors.Add(CheckValidIndex(CurrentGridIndex + GridWidth));
 
 	int Current = CurrentGridIndex;
-	// todo finish
 	for(int i = 0; i < 3; i++)
 	{
-		OutNeighbors.Add(CurrentGridIndex + 1);
+		if(Current >= 0)
+		{
+			const int Mod = Current % GridWidth;
+			
+			OutNeighbors.Add(Mod != GridWidth - 1 ? Current + 1 : -1);
+			OutNeighbors.Add(Mod != 0 ? Current - 1 : -1);
+		}
+		
+		if(!IncludeDiagonals)
+			break;
+		
 		Current = OutNeighbors[i];
 	}
-	
+}
 
-	int Remainder = CurrentGridIndex % GridWidth;
+int AFGGrid::GetClosestIndex(FVector WorldLocation)
+{
+	const int MiddleIndex = GetMiddleIndex();
+	const int HalfWidth = GridWidth * 0.5f;
+	const int HalfHeight = GridHeight * 0.5f;
+	
+	const FVector LocalPos = GetTransform().InverseTransformPosition(WorldLocation);
+	const FVector2D FlattenedLocalPos = FVector2D(LocalPos.X, LocalPos.Y);
+	
+	const FVector2D FlattenedGridCoordinates = FlattenedLocalPos / GridPointScale;
+
+	FIntPoint IndexOffsetFromCenter = FIntPoint();
+	if(GridWidth % 2 == 0)
+		IndexOffsetFromCenter.X = FMath::Floor(FlattenedGridCoordinates.X);
+	else
+		IndexOffsetFromCenter.X = FMath::RoundHalfFromZero(FlattenedGridCoordinates.X);
+
+	if(GridHeight % 2 == 0)
+		IndexOffsetFromCenter.Y = FMath::Floor(FlattenedGridCoordinates.Y);
+	else
+		IndexOffsetFromCenter.Y = FMath::RoundHalfFromZero(FlattenedGridCoordinates.Y);
+
+	IndexOffsetFromCenter.X = FMath::Clamp(IndexOffsetFromCenter.X, -HalfWidth, HalfWidth - (GridWidth % 2 == 0));
+	IndexOffsetFromCenter.Y = FMath::Clamp(IndexOffsetFromCenter.Y, -HalfHeight, HalfHeight - (GridHeight % 2 == 0));
+
+	return MiddleIndex + IndexOffsetFromCenter.X + IndexOffsetFromCenter.Y * GridWidth;
 }
