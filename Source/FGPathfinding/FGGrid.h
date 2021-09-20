@@ -4,6 +4,74 @@
 
 DECLARE_LOG_CATEGORY_EXTERN(LogGrid, Log, All);
 
+USTRUCT(BlueprintType, Blueprintable)
+struct FColorIndexPair
+{
+	GENERATED_BODY()
+
+	FColorIndexPair() {}
+	FColorIndexPair(int Index, FColor Color)
+	{
+		this->Index = Index;
+		this->Color = Color;
+	}
+
+	UPROPERTY(BlueprintReadWrite, EditAnywhere)
+	int Index;
+
+	UPROPERTY(BlueprintReadWrite, EditAnywhere)
+	FColor Color;
+};
+
+UENUM()
+enum EGridFeature
+{
+	Standard,
+	Obstacle
+};
+
+USTRUCT(BlueprintType, Blueprintable)
+struct FGridFeatureInfo
+{
+	GENERATED_BODY()
+
+	FGridFeatureInfo() {}
+	FGridFeatureInfo(FIntPoint FromCoordinate, FIntPoint ToCoordinate, EGridFeature Feature)
+	{
+		this->FromCoordinate = FromCoordinate;
+		this->ToCoordinate = ToCoordinate;
+		this->Feature = Feature;
+	}
+
+	UPROPERTY(BlueprintReadWrite, EditAnywhere)
+	FIntPoint FromCoordinate;
+
+	UPROPERTY(BlueprintReadWrite, EditAnywhere)
+	FIntPoint ToCoordinate;
+
+	UPROPERTY(BlueprintReadWrite, EditAnywhere)
+	TEnumAsByte<EGridFeature> Feature;
+};
+
+USTRUCT(BlueprintType, Blueprintable)
+struct FColorCostPair
+{
+	GENERATED_BODY()
+
+	FColorCostPair() {}
+	FColorCostPair(FColor Color, int Cost)
+	{
+		this->Color = Color;
+		this->Cost = Cost;
+	}
+
+	UPROPERTY(BlueprintReadWrite, EditAnywhere)
+	FColor Color;
+
+	UPROPERTY(BlueprintReadWrite, EditAnywhere)
+	int Cost;
+};
+
 UCLASS()
 class FGPATHFINDING_API AFGGrid : public AActor
 {
@@ -33,6 +101,12 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
 	UStaticMeshComponent* GridLineComponent;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
+	UStaticMeshComponent* GridPlaneComponent;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	TArray<FGridFeatureInfo> GridFeatureInfo;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	int GridWidth = 1;
 
@@ -58,6 +132,13 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	UMaterial* GridLineMaterial;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	UMaterial* GridPlaneMaterial;
+
+	/** The definition of what the color and cost of each feature should be */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	TMap<TEnumAsByte<EGridFeature>, FColorCostPair> FeatureColorCostMap = {{Standard, FColorCostPair(FColor::White, 0)}, {Obstacle, FColorCostPair(FColor::Red, -1)}};
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
 	TArray<FVector> GridPoints;
 
@@ -80,6 +161,25 @@ public:
 	UFUNCTION(BlueprintCallable)
 	bool IsGridGenerationValid(bool RegenerateGridIfNot = false);
 
+	UFUNCTION(BlueprintCallable)
+	void SetPixelsOnPlaneTexture(TArray<FColorIndexPair>& ColorData);
+
+	UFUNCTION(BlueprintCallable)
+	int GetCostForGridIndex(int Index);
+	
+	UFUNCTION(BlueprintCallable)
+	void SetPixelOnPlaneTexture(int Index, FColor Color);
+
+	/** Fill plane texture with base color */
+	UFUNCTION(BlueprintCallable)
+	void ResetPlaneTexture();
+	
+	UFUNCTION(BlueprintCallable)
+	FIntPoint GridIndexToGridCoordinates(int Index);
+
+	UFUNCTION(BlueprintCallable)
+	int GridCoordinatesToGridIndex(FIntPoint GridCoordinates);
+
 private:
 	/** Will return the middle index of the grid (if the width/length of the grid is even it will return the top right middle when looking straight at the grid with grid point with index 0 in the bottom left */
 	int GetMiddleIndex();
@@ -90,9 +190,27 @@ private:
 	/** If input is a valid index, will return true */
 	bool IsValidIndex(int Input) const;
 
+	void CreatePlaneTexture();
+	void SetPlaneTexture(const uint8* Colors);
+	void BuildFeatureMapping();
+
+	bool MapsAreEqual(TMap<TEnumAsByte<EGridFeature>, FColorCostPair>& A, TMap<TEnumAsByte<EGridFeature>, FColorCostPair>& B);
+
+	UPROPERTY()
+	TArray<TEnumAsByte<EGridFeature>> FeatureMapping;
+
 	UPROPERTY(Transient)
 	AActor* GridLines;
 
 	UPROPERTY()
+	UTexture2D* GridPlaneTexture;
+
+	UPROPERTY()
+	TMap<TEnumAsByte<EGridFeature>, FColorCostPair> PreviousFeatureColorCostMap;
+
+	UPROPERTY()
 	UMaterialInstanceDynamic* LineMaterial;
+
+	UPROPERTY()
+	UMaterialInstanceDynamic* PlaneMaterial;
 };

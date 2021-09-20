@@ -1,5 +1,7 @@
 ﻿#include "FGGrid.h"
 
+#include "FGGameState.h"
+#include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetSystemLibrary.h"
 
 DEFINE_LOG_CATEGORY(LogGrid);
@@ -14,6 +16,10 @@ AFGGrid::AFGGrid()
 void AFGGrid::BeginPlay()
 {
 	Super::BeginPlay();
+
+	AFGGameState* GameState = Cast<AFGGameState>(UGameplayStatics::GetGameState(this));
+	GameState->GridsInWorld.Add(this);
+	ResetPlaneTexture();
 }
 
 void AFGGrid::OnConstruction(const FTransform& Transform)
@@ -107,7 +113,209 @@ void AFGGrid::GenerateGrid()
 			
 		LineMaterial->SetScalarParameterValue(TEXT("LineWidth"), InputLineWidth);
 	}
+
+	if(GridPlaneMaterial)
+	{
+		if(!GridPlaneComponent)
+		{
+			GridPlaneComponent = NewObject<UStaticMeshComponent>(this, UStaticMeshComponent::StaticClass(), TEXT("GridPlaneComponent"));
+			AddInstanceComponent(GridPlaneComponent);
+			GridPlaneComponent->AttachToComponent(RootComponent, FAttachmentTransformRules(EAttachmentRule::KeepWorld, false));
+			GridPlaneComponent->SetCollisionProfileName(TEXT("NoCollision"));
+			GridPlaneComponent->SetStaticMesh(PlaneMesh);
+		}
+
+		if(!PlaneMaterial)
+			PlaneMaterial = GridPlaneComponent->CreateAndSetMaterialInstanceDynamicFromMaterial(0, GridPlaneMaterial);
+		
+		ResetPlaneTexture();
+
+		const float LengthX = GridWidth * GridPointScale;
+		const float LengthY = GridHeight * GridPointScale;
+
+		// Assumes the grid plane plane mesh has a size of 100x100 units at 1x1x1 scale.
+		GridPlaneComponent->SetRelativeScale3D(FVector(LengthX * 0.01f, LengthY * 0.01f, 1.f));
+	}
 }
+
+void AFGGrid::SetPixelsOnPlaneTexture(TArray<FColorIndexPair>& ColorData)
+{
+	if(!GridPlaneTexture)
+	{
+		CreatePlaneTexture();
+	}
+	
+	FTexture2DMipMap& Mip = GridPlaneTexture->PlatformData->Mips[0];
+
+	Mip.BulkData.Lock(LOCK_READ_WRITE);
+	uint8* TextureData = static_cast<uint8*>(Mip.BulkData.Realloc(GridWidth * GridHeight * 4));
+	for(int i = 0; i < ColorData.Num(); i++)
+	{
+		const int Index = ColorData[i].Index;
+		const FColor Color = ColorData[i].Color;
+		
+		TextureData[4 * Index] = Color.B;
+		TextureData[4 * Index + 1] = Color.G;
+		TextureData[4 * Index + 2] = Color.R;
+		TextureData[4 * Index + 3] = Color.A;
+	}
+	Mip.BulkData.Unlock();
+
+	GridPlaneTexture->UpdateResource();
+}
+
+int AFGGrid::GetCostForGridIndex(int Index)
+{
+	return FeatureColorCostMap[FeatureMapping[Index]].Cost;
+}
+
+void AFGGrid::SetPixelOnPlaneTexture(int Index, FColor Color)
+{
+	TArray<FColorIndexPair> ColorData;
+	ColorData.Add(FColorIndexPair(Index, Color));
+	SetPixelsOnPlaneTexture(ColorData);
+}
+
+void AFGGrid::ResetPlaneTexture()
+{
+	CreatePlaneTexture();
+	BuildFeatureMapping();
+	
+	PreviousFeatureColorCostMap = FeatureColorCostMap;
+	
+	uint8* Pixels = new uint8[GridWidth * GridHeight * 4];
+	for (int y = 0; y < GridHeight; y++)
+	{
+		for (int x = 0; x < GridWidth; x++)
+		{
+			const int PixelIndex = GridCoordinatesToGridIndex(FIntPoint(x, y));
+			const EGridFeature Feature = FeatureMapping[PixelIndex];
+			const FColorCostPair Pair = FeatureColorCostMap[Feature];
+					
+			Pixels[4 * PixelIndex] = Pair.Color.B;
+			Pixels[4 * PixelIndex + 1] = Pair.Color.G;
+			Pixels[4 * PixelIndex + 2] = Pair.Color.R;
+			Pixels[4 * PixelIndex + 3] = Pair.Color.A;
+		}
+	}
+
+	SetPlaneTexture(Pixels);
+
+	delete[] Pixels;
+}
+
+FIntPoint AFGGrid::GridIndexToGridCoordinates(int Index)
+{
+	if (Index >= GridPoints.Num() || Index < 0)
+		return FIntPoint(-1, -1);
+
+	const FIntPoint Coordinate = FIntPoint(Index % GridWidth, Index / GridWidth);
+
+	return Coordinate;
+}
+
+int AFGGrid::GridCoordinatesToGridIndex(FIntPoint GridCoordinates)
+{
+	if (GridCoordinates.X >= GridWidth || GridCoordinates.Y >= GridHeight)
+		return -1;
+			
+	const int Index = GridCoordinates.X + GridCoordinates.Y * GridWidth;
+
+	if (Index >= GridPoints.Num() || Index < 0)
+		return -1;
+	
+	return Index;
+}
+
+void AFGGrid::CreatePlaneTexture()
+{
+	if(GridPlaneTexture && GridPlaneTexture->GetSizeX() == GridWidth && GridPlaneTexture->GetSizeY() == GridHeight)
+		return;
+	
+	GridPlaneTexture = UTexture2D::CreateTransient(GridWidth, GridHeight);
+	GridPlaneTexture->LODGroup = TEXTUREGROUP_Pixels2D;
+
+	PlaneMaterial->SetTextureParameterValue(TEXT("GridTexture"), GridPlaneTexture);
+}
+
+void AFGGrid::SetPlaneTexture(const uint8* Colors)
+{
+	FTexture2DMipMap& Mip = GridPlaneTexture->PlatformData->Mips[0];
+
+	Mip.BulkData.Lock(LOCK_READ_WRITE);
+	uint8* TextureData = static_cast<uint8*>(Mip.BulkData.Realloc(GridWidth * GridHeight * 4));
+	FMemory::Memcpy(TextureData, Colors, sizeof(uint8) * GridWidth * GridHeight * 4);
+	Mip.BulkData.Unlock();
+
+	GridPlaneTexture->UpdateResource();
+}
+
+void AFGGrid::BuildFeatureMapping()
+{
+	FeatureMapping.Empty();
+
+	for(int i = 0; i < GridPoints.Num(); i++)
+	{
+		FeatureMapping.Add(Standard);
+	}
+
+	for(int i = 0; i < GridFeatureInfo.Num(); i++)
+	{
+		const FGridFeatureInfo Current = GridFeatureInfo[i];
+		
+		int LowestX, LowestY, HighestX, HighestY;
+
+		if(Current.FromCoordinate.X < Current.ToCoordinate.X)
+		{
+			LowestX = Current.FromCoordinate.X;
+			HighestX = Current.ToCoordinate.X;
+		}
+		else
+		{
+			LowestX = Current.ToCoordinate.X;
+			HighestX = Current.FromCoordinate.X;
+		}
+
+		if(Current.FromCoordinate.Y < Current.ToCoordinate.Y)
+		{
+			LowestY = Current.FromCoordinate.Y;
+			HighestY = Current.ToCoordinate.Y;
+		}
+		else
+		{
+			LowestY = Current.ToCoordinate.Y;
+			HighestY = Current.FromCoordinate.Y;
+		}
+
+		for(int x = LowestX; x <= HighestX; x++)
+		{
+			for(int y = LowestY; y <= HighestY; y++)
+			{
+				const int Index = GridCoordinatesToGridIndex(FIntPoint(x, y));
+				FeatureMapping[Index] = Current.Feature;
+			}
+		}
+	}
+}
+
+bool AFGGrid::MapsAreEqual(TMap<TEnumAsByte<EGridFeature>, FColorCostPair>& A, TMap<TEnumAsByte<EGridFeature>, FColorCostPair>& B)
+{
+	if(A.Num() != B.Num())
+		return false;
+
+	TArray<TEnumAsByte<EGridFeature>> Keys;
+	FeatureColorCostMap.GetKeys(Keys);
+	
+	for(int i = 0; i < Keys.Num(); i++)
+	{
+		const EGridFeature Key = Keys[i];
+		
+		if(A[Key].Color != B[Key].Color)
+			return false;
+	}
+	return true;
+}
+
 
 void AFGGrid::DebugDrawGridIndices()
 {
