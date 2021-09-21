@@ -18,7 +18,10 @@ void AFGGrid::BeginPlay()
 	Super::BeginPlay();
 
 	AFGGameState* GameState = Cast<AFGGameState>(UGameplayStatics::GetGameState(this));
-	GameState->GridsInWorld.Add(this);
+
+	if(GameState != nullptr)
+		GameState->GridsInWorld.Add(this);
+
 	ResetPlaneTexture();
 }
 
@@ -164,9 +167,9 @@ void AFGGrid::SetPixelsOnPlaneTexture(TArray<FColorIndexPair>& ColorData)
 	GridPlaneTexture->UpdateResource();
 }
 
-int AFGGrid::GetCostForGridIndex(int Index)
+float AFGGrid::GetCostForGridIndex(int Index)
 {
-	return FeatureColorCostMap[FeatureMapping[Index]].Cost;
+	return FeatureColorCostMap[FeatureMapping[Index]].CostMultiplier;
 }
 
 void AFGGrid::SetPixelOnPlaneTexture(int Index, FColor Color)
@@ -188,7 +191,7 @@ void AFGGrid::ResetPlaneTexture()
 	{
 		for (int x = 0; x < GridWidth; x++)
 		{
-			const int PixelIndex = GridCoordinatesToGridIndex(FIntPoint(x, y));
+			const int PixelIndex = ToGridIndex(FIntPoint(x, y));
 			const EGridFeature Feature = FeatureMapping[PixelIndex];
 			const FColorCostPair Pair = FeatureColorCostMap[Feature];
 					
@@ -204,7 +207,7 @@ void AFGGrid::ResetPlaneTexture()
 	delete[] Pixels;
 }
 
-FIntPoint AFGGrid::GridIndexToGridCoordinates(int Index)
+FIntPoint AFGGrid::ToGridCoords(int Index)
 {
 	if (Index >= GridPoints.Num() || Index < 0)
 		return FIntPoint(-1, -1);
@@ -214,7 +217,7 @@ FIntPoint AFGGrid::GridIndexToGridCoordinates(int Index)
 	return Coordinate;
 }
 
-int AFGGrid::GridCoordinatesToGridIndex(FIntPoint GridCoordinates)
+int AFGGrid::ToGridIndex(FIntPoint GridCoordinates)
 {
 	if (GridCoordinates.X >= GridWidth || GridCoordinates.Y >= GridHeight)
 		return -1;
@@ -291,7 +294,7 @@ void AFGGrid::BuildFeatureMapping()
 		{
 			for(int y = LowestY; y <= HighestY; y++)
 			{
-				const int Index = GridCoordinatesToGridIndex(FIntPoint(x, y));
+				const int Index = ToGridIndex(FIntPoint(x, y));
 				FeatureMapping[Index] = Current.Feature;
 			}
 		}
@@ -317,11 +320,14 @@ bool AFGGrid::MapsAreEqual(TMap<TEnumAsByte<EGridFeature>, FColorCostPair>& A, T
 }
 
 
-void AFGGrid::DebugDrawGridIndices()
+void AFGGrid::DebugDrawGridIndices(UObject* WorldContextObject)
 {
+	if(WorldContextObject == nullptr)
+		WorldContextObject = this;
+	
 	for(int i = 0; i < GridPoints.Num(); i++)
 	{
-		UKismetSystemLibrary::DrawDebugString(this, GridPoints[i], FString::FromInt(i), nullptr, DrawDebugColor);
+		UKismetSystemLibrary::DrawDebugString(WorldContextObject, GridPoints[i], FString::FromInt(i), this, DrawDebugColor);
 	}
 }
 

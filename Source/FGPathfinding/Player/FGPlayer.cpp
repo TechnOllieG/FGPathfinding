@@ -15,6 +15,58 @@ AFGPlayer::AFGPlayer()
 void AFGPlayer::BeginPlay()
 {
 	Super::BeginPlay();
+
+	if(StartWithMouseLocked)
+		OnToggleMouseLock();
+}
+
+void AFGPlayer::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+
+	if(CurrentGrid == nullptr)
+	{
+		FVector WorldMouseLocation;
+		GetMouseLocationOnGrid(WorldMouseLocation, CurrentGrid);
+	}
+
+	if(DebugDrawGridIndices)
+		CurrentGrid->DebugDrawGridIndices();
+
+	const float Time = GetGameTimeSinceCreation();
+	
+	if(!RunAStarIteratively || Time - LastIterationTime < DelayBetweenIteration)
+		return;
+
+	TArray<int> Path;
+	LastIterationTime = Time;
+			
+	UFGPathfindingLibrary::OneIterationOfAStar(CurrentGrid, IndexForStartPath, IndexForEndPath, CachedOpenList, CachedClosedList, Path, StartCoords, EndCoords);
+
+	if(Path.Num() > 0)
+	{
+		CurrentGrid->ResetPlaneTexture();
+		DrawPath(CurrentGrid, Path, AIPathColor);
+		CachedOpenList.Empty();
+		CachedClosedList.Empty();
+		RunAStarIteratively = false;
+		return;
+	}
+
+	TArray<FAStarNode>* CurrentArray = &CachedOpenList;
+	FColor CurrentColor = AIPathOpenColor;
+			
+	for(int i = 0; i < 2; i++)
+	{
+		TArray<int> CurrentPath;
+		for(int j = 0; j < CurrentArray->Num(); j++)
+		{
+			CurrentPath.Add(CurrentArray->GetData()[j].GridIndex);
+		}
+		DrawPath(CurrentGrid, CurrentPath, CurrentColor);
+		CurrentArray = &CachedClosedList;
+		CurrentColor = AIPathClosedColor;
+	}
 }
 
 void AFGPlayer::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -35,7 +87,7 @@ void AFGPlayer::OnSelect()
 		return;
 	}
 
-	if(!PlayerController->ShouldShowMouseCursor())
+	if(!PlayerController->ShouldShowMouseCursor() || RunAStarIteratively)
 		return;
 	
 	AFGGrid* Grid;
@@ -61,17 +113,32 @@ void AFGPlayer::OnSelect()
 	IndexForEndPath = SelectedGridIndex;
 	Grid->SetPixelOnPlaneTexture(IndexForEndPath, AIPathEndColor);
 	
-	TArray<int> Path;
-	UFGPathfindingLibrary::GenerateAStarPath(Grid, IndexForStartPath, IndexForEndPath, Path);
+	if(!SlowAStarWithVisualization)
+	{
+		TArray<int> Path;
+		UFGPathfindingLibrary::GenerateAStarPath(Grid, IndexForStartPath, IndexForEndPath, Path, 1000);
+		DrawPath(Grid, Path, AIPathColor);
+	}
+	else
+	{
+		StartCoords = Grid->ToGridCoords(IndexForStartPath);
+		EndCoords = Grid->ToGridCoords(IndexForEndPath);
+		RunAStarIteratively = true;
+		CachedOpenList.Add(FAStarNode(IndexForStartPath, StartCoords, 0.f, UFGPathfindingLibrary::Dist(StartCoords, EndCoords)));
+		CurrentGrid = Grid;
+	}
+}
+
+void AFGPlayer::DrawPath(AFGGrid* Grid, TArray<int>& Path, FColor Color)
+{
 	TArray<FColorIndexPair> ColorIndexPairs;
-	
 	for(int i = 0; i < Path.Num(); i++)
 	{
 		const int CurrentIndex = Path[i];
 		if(CurrentIndex == IndexForStartPath || CurrentIndex == IndexForEndPath)
 			continue;
 		
-		ColorIndexPairs.Add(FColorIndexPair(CurrentIndex, AIPathColor));
+		ColorIndexPairs.Add(FColorIndexPair(CurrentIndex, Color));
 		Grid->SetPixelsOnPlaneTexture(ColorIndexPairs);
 	}
 }

@@ -59,17 +59,17 @@ struct FColorCostPair
 	GENERATED_BODY()
 
 	FColorCostPair() {}
-	FColorCostPair(FColor Color, int Cost)
+	FColorCostPair(FColor Color, float CostMultiplier)
 	{
 		this->Color = Color;
-		this->Cost = Cost;
+		this->CostMultiplier = CostMultiplier;
 	}
 
 	UPROPERTY(BlueprintReadWrite, EditAnywhere)
 	FColor Color;
 
 	UPROPERTY(BlueprintReadWrite, EditAnywhere)
-	int Cost;
+	float CostMultiplier;
 };
 
 UCLASS()
@@ -93,7 +93,7 @@ public:
 	void GenerateGrid();
 
 	UFUNCTION(BlueprintCallable)
-	void DebugDrawGridIndices();
+	void DebugDrawGridIndices(UObject* WorldContextObject = nullptr);
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
 	USceneComponent* SceneRoot;
@@ -137,7 +137,7 @@ public:
 
 	/** The definition of what the color and cost of each feature should be */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
-	TMap<TEnumAsByte<EGridFeature>, FColorCostPair> FeatureColorCostMap = {{Standard, FColorCostPair(FColor::White, 0)}, {Obstacle, FColorCostPair(FColor::Red, -1)}};
+	TMap<TEnumAsByte<EGridFeature>, FColorCostPair> FeatureColorCostMap = {{Standard, FColorCostPair(FColor::White, 1.f)}, {Obstacle, FColorCostPair(FColor::Red, -1.f)}};
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
 	TArray<FVector> GridPoints;
@@ -165,7 +165,7 @@ public:
 	void SetPixelsOnPlaneTexture(TArray<FColorIndexPair>& ColorData);
 
 	UFUNCTION(BlueprintCallable)
-	int GetCostForGridIndex(int Index);
+	float GetCostForGridIndex(int Index);
 	
 	UFUNCTION(BlueprintCallable)
 	void SetPixelOnPlaneTexture(int Index, FColor Color);
@@ -175,10 +175,10 @@ public:
 	void ResetPlaneTexture();
 	
 	UFUNCTION(BlueprintCallable)
-	FIntPoint GridIndexToGridCoordinates(int Index);
+	FIntPoint ToGridCoords(int Index);
 
 	UFUNCTION(BlueprintCallable)
-	int GridCoordinatesToGridIndex(FIntPoint GridCoordinates);
+	int ToGridIndex(FIntPoint GridCoordinates);
 
 private:
 	/** Will return the middle index of the grid (if the width/length of the grid is even it will return the top right middle when looking straight at the grid with grid point with index 0 in the bottom left */
