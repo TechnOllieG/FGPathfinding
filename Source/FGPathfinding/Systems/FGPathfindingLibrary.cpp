@@ -76,7 +76,7 @@ bool UFGPathfindingLibrary::OneIterationOfAStar(AFGGrid* Grid, int StartIndex, i
 
 			for(int j = TempArray.Num() - 1; j > -1; j--)
 			{
-				if(TempArray[j] < 0 || TempArray[j] >= Grid->GridPoints.Num())
+				if(TempArray[j] < 0 || TempArray[j] >= Grid->GridPoints.Num() || (TempArray[j] == 0 && StartIndex != 0 && EndIndex != 0))
 					continue;
 				
 				OutPath.Add(TempArray[j]);
