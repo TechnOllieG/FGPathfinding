@@ -11,4 +11,6 @@ class AFGGameState : public AGameStateBase
 public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
 	TArray<AFGGrid*> GridsInWorld;
+
+	AFGGrid* GetClosestGrid(const FVector BasisLocation);
 };
