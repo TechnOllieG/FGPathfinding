@@ -5,6 +5,7 @@
 #include "FGPathfinding/Systems/FGGrid.h"
 #include "FGPathfinding/Systems/FGPathfindingLibrary.h"
 #include "Kismet/GameplayStatics.h"
+#include "Kismet/KismetMathLibrary.h"
 
 AFGAStarEnemy::AFGAStarEnemy()
 {
@@ -59,7 +60,9 @@ void AFGAStarEnemy::Tick(float DeltaSeconds)
 
 	if(CurrentlyMoving)
 	{
-		AddActorWorldOffset((TargetPos - OriginPos) / CurrentDelta * DeltaSeconds * SpeedMultiplier);
+		const FVector MoveDirection = (TargetPos - GetActorLocation()).GetSafeNormal2D();
+		AddActorWorldOffset(MoveDirection * DeltaSeconds * SpeedMultiplier);
+		SetActorRotation(UKismetMathLibrary::MakeRotFromXZ((PlayerToFollow->GetActorLocation() - GetActorLocation()).GetSafeNormal2D(), FVector::UpVector));
 		
 		if((TargetPos - GetActorLocation()).SizeSquared2D() < FMath::Square(ClosenessRequiredToSwitchTarget))
 		{
@@ -77,12 +80,7 @@ void AFGAStarEnemy::UpdateTargetPos(int NewTargetIndex)
 	}
 	
 	CurrentTargetIndex = NewTargetIndex;
-	OriginPos = Grid->GridPoints[CurrentPath[CurrentTargetIndex - 1]];
 	TargetPos = Grid->GridPoints[CurrentPath[CurrentTargetIndex]];
-	CurrentDelta = (TargetPos - OriginPos).Size();
-	
-	if(FMath::IsNearlyZero(CurrentDelta))
-		UpdateTargetPos(++NewTargetIndex);
 	
 	CurrentlyMoving = true;
 }

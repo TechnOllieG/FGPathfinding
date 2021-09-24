@@ -10,5 +10,10 @@ public class FGPathfindingTarget : TargetRules
 		Type = TargetType.Game;
 		DefaultBuildSettings = BuildSettingsVersion.V2;
 		ExtraModuleNames.AddRange( new string[] { "FGPathfinding" } );
+
+		if (Type != TargetType.Editor)
+			return;
+		
+		ExtraModuleNames.AddRange(new string[] { "FGPathfindingEditor" });
 	}
 }

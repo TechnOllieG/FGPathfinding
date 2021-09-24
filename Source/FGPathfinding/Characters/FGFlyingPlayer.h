@@ -63,10 +63,10 @@ private:
 	AFGGrid* CurrentGrid;
 	
 	TArray<FAStarNode> CachedOpenList;
-	TArray<FAStarNode> CachedClosedList;
+	TMap<int, FAStarNode> CachedClosedList;
 	FIntPoint StartCoords;
 	FIntPoint EndCoords;
 	float LastIterationTime = -100.f;
 
-	void DrawPath(AFGGrid* Grid, TArray<int>& Path, FColor Color);
+	void DrawPath(AFGGrid* Grid, TArray<int>& Path, FColor Color, bool DrawStartAndEnd = false);
 };

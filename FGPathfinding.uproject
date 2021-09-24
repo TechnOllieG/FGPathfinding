@@ -8,6 +8,11 @@
 			"Name": "FGPathfinding",
 			"Type": "Runtime",
 			"LoadingPhase": "Default"
+		},
+		{
+			"Name": "FGPathfindingEditor",
+			"Type": "Editor",
+			"LoadingPhase":  "Default"
 		}
 	],
 	"Plugins": [

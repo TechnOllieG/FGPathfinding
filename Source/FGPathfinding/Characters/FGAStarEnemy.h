@@ -34,10 +34,8 @@ private:
 	TArray<int> CurrentPath = TArray<int>();
 	int OldPlayerIndex = -1;
 	int CurrentTargetIndex = 1;
-	FVector OriginPos;
 	FVector TargetPos;
 	bool CurrentlyMoving = false;
-	float CurrentDelta = 0.f;
 
 	void UpdateTargetPos(int NewTargetIndex);
 };

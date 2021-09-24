@@ -105,6 +105,7 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
 	UStaticMeshComponent* GridPlaneComponent;
 
+	/** A way to specify feature info on the grid without adding components (this was used mostly before gridfeaturecomponents existed) */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	TArray<FGridFeatureInfo> GridFeatureInfo;
 
@@ -126,7 +127,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	FLinearColor DrawDebugColor;
 
-	/** This is the plane mesh that the grid line material will be applied to */
+	/** This is the plane mesh that the grid line/grid plane material will be applied to */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	UStaticMesh* PlaneMesh;
 	
@@ -194,6 +195,7 @@ private:
 	void CreatePlaneTexture();
 	void SetPlaneTexture(const uint8* Colors);
 	void BuildFeatureMapping();
+	void SetFeatureBetweenGridCoords(FIntPoint A, FIntPoint B, EGridFeature Feature);
 
 	bool MapsAreEqual(TMap<TEnumAsByte<EGridFeature>, FColorCostPair>& A, TMap<TEnumAsByte<EGridFeature>, FColorCostPair>& B);
 

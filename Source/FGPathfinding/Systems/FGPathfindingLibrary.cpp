@@ -7,7 +7,7 @@ DEFINE_LOG_CATEGORY(LogFGPathfindingLibrary);
 void UFGPathfindingLibrary::GenerateAStarPath(AFGGrid* Grid, int StartIndex, int EndIndex, TArray<int>& OutPath, int MaxIterations)
 {
 	TArray<FAStarNode> OpenList;
-	TArray<FAStarNode> ClosedList;
+	TMap<int, FAStarNode> ClosedList;
 
 	FIntPoint StartCoords = Grid->ToGridCoords(StartIndex);
 	FIntPoint EndCoords = Grid->ToGridCoords(EndIndex);
@@ -25,7 +25,7 @@ void UFGPathfindingLibrary::GenerateAStarPath(AFGGrid* Grid, int StartIndex, int
 	}
 }
 
-bool UFGPathfindingLibrary::OneIterationOfAStar(AFGGrid* Grid, int StartIndex, int EndIndex, TArray<FAStarNode>& OpenList, TArray<FAStarNode>& ClosedList,
+bool UFGPathfindingLibrary::OneIterationOfAStar(AFGGrid* Grid, int StartIndex, int EndIndex, TArray<FAStarNode>& OpenList, TMap<int, FAStarNode>& ClosedList,
 	TArray<int>& OutPath, FIntPoint& StartCoords, FIntPoint& EndCoords)
 {
 	if (StartIndex == EndIndex || StartIndex < 0 || StartIndex >= Grid->GridPoints.Num() || EndIndex < 0 || EndIndex >=
@@ -43,7 +43,8 @@ bool UFGPathfindingLibrary::OneIterationOfAStar(AFGGrid* Grid, int StartIndex, i
 
 	const FAStarNode Current = OpenList[0];
 	OpenList.RemoveAt(0);
-	FAStarNode* Parent = &ClosedList[ClosedList.Add(Current)];
+	ClosedList.Add(Current.GridIndex, Current);
+	int Parent = Current.GridIndex;
 
 	TArray<int> Neighbors;
 	Grid->GetNeighbors(Current.GridIndex, Neighbors);
@@ -63,22 +64,22 @@ bool UFGPathfindingLibrary::OneIterationOfAStar(AFGGrid* Grid, int StartIndex, i
 			
 			FAStarNode Temp = FAStarNode();
 			Temp.GridIndex = CurrentNeighbor;
+			Temp.GridCoordinate = Grid->ToGridCoords(CurrentNeighbor);
 			Temp.Previous = Parent;
-			
-			FAStarNode* CurrentNode = &Temp;
 
-			while(CurrentNode->Previous != nullptr)
+			ClosedList.Add(CurrentNeighbor, Temp);
+			
+			int CurrentNode = CurrentNeighbor;
+
+			while(ClosedList.Contains(CurrentNode))
 			{
-				int Item = CurrentNode->GridIndex;
+				int Item = ClosedList[CurrentNode].GridIndex;
 				TempArray.Add(Item);
-				CurrentNode = CurrentNode->Previous;
+				CurrentNode = ClosedList[CurrentNode].Previous;
 			}
 
 			for(int j = TempArray.Num() - 1; j > -1; j--)
 			{
-				if(TempArray[j] < 0 || TempArray[j] >= Grid->GridPoints.Num() || (TempArray[j] == 0 && StartIndex != 0 && EndIndex != 0))
-					continue;
-				
 				OutPath.Add(TempArray[j]);
 			}
 			return true;
@@ -89,7 +90,7 @@ bool UFGPathfindingLibrary::OneIterationOfAStar(AFGGrid* Grid, int StartIndex, i
 		const float Total = GCost + HCost;
 
 		FAStarNode* Node = nullptr;
-		if (ContainsIndex(OpenList, CurrentNeighbor, Node) || ContainsIndex(ClosedList, CurrentNeighbor, Node))
+		if (ContainsIndex(OpenList, CurrentNeighbor, Node) || (Node = ClosedList.Find(CurrentNeighbor)) != nullptr)
 		{
 			if (Node->Total > Total)
 			{

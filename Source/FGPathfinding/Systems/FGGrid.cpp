@@ -1,5 +1,6 @@
 ﻿#include "FGGrid.h"
 
+#include "FGGridFeatureComponent.h"
 #include "FGPathfinding/FGGameState.h"
 #include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetSystemLibrary.h"
@@ -273,38 +274,59 @@ void AFGGrid::BuildFeatureMapping()
 	for(int i = 0; i < GridFeatureInfo.Num(); i++)
 	{
 		const FGridFeatureInfo Current = GridFeatureInfo[i];
+
+		SetFeatureBetweenGridCoords(Current.FromCoordinate, Current.ToCoordinate, Current.Feature);
+	}
+
+	TArray<UFGGridFeatureComponent*> FeatureComponents;
+	GetComponents<UFGGridFeatureComponent>(FeatureComponents);
+
+	for(UFGGridFeatureComponent* Comp : FeatureComponents)
+	{
+		const FMatrix Matrix = Comp->GetComponentTransform().ToMatrixNoScale();
+		const FVector Extents = Comp->Extents;
+		const FVector A = Matrix.TransformPosition(Extents);
+		const FVector B = Matrix.TransformPosition(-Extents);
+
+		FIntPoint From = ToGridCoords(GetClosestIndex(A));
+		FIntPoint To = ToGridCoords(GetClosestIndex(B));
 		
-		int LowestX, LowestY, HighestX, HighestY;
+		SetFeatureBetweenGridCoords(From, To, Comp->Feature);
+	}
+}
 
-		if(Current.FromCoordinate.X < Current.ToCoordinate.X)
-		{
-			LowestX = Current.FromCoordinate.X;
-			HighestX = Current.ToCoordinate.X;
-		}
-		else
-		{
-			LowestX = Current.ToCoordinate.X;
-			HighestX = Current.FromCoordinate.X;
-		}
+void AFGGrid::SetFeatureBetweenGridCoords(FIntPoint A, FIntPoint B, EGridFeature Feature)
+{
+	int LowestX, LowestY, HighestX, HighestY;
+	
+	if(A.X < B.X)
+	{
+		LowestX = A.X;
+		HighestX = B.X;
+	}
+	else
+	{
+		LowestX = B.X;
+		HighestX = A.X;
+	}
 
-		if(Current.FromCoordinate.Y < Current.ToCoordinate.Y)
-		{
-			LowestY = Current.FromCoordinate.Y;
-			HighestY = Current.ToCoordinate.Y;
-		}
-		else
-		{
-			LowestY = Current.ToCoordinate.Y;
-			HighestY = Current.FromCoordinate.Y;
-		}
+	if(A.Y < B.Y)
+	{
+		LowestY = A.Y;
+		HighestY = B.Y;
+	}
+	else
+	{
+		LowestY = B.Y;
+		HighestY = A.Y;
+	}
 
-		for(int x = LowestX; x <= HighestX; x++)
+	for(int x = LowestX; x <= HighestX; x++)
+	{
+		for(int y = LowestY; y <= HighestY; y++)
 		{
-			for(int y = LowestY; y <= HighestY; y++)
-			{
-				const int Index = ToGridIndex(FIntPoint(x, y));
-				FeatureMapping[Index] = Current.Feature;
-			}
+			const int Index = ToGridIndex(FIntPoint(x, y));
+			FeatureMapping[Index] = Feature;
 		}
 	}
 }

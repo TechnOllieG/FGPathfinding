@@ -9,6 +9,6 @@ public class FGPathfindingEditorTarget : TargetRules
 	{
 		Type = TargetType.Editor;
 		DefaultBuildSettings = BuildSettingsVersion.V2;
-		ExtraModuleNames.AddRange( new string[] { "FGPathfinding" } );
+		ExtraModuleNames.AddRange( new string[] { "FGPathfinding", "FGPathfindingEditor" } );
 	}
 }

@@ -46,13 +46,16 @@ void AFGFlyingPlayer::Tick(float DeltaSeconds)
 	if(Path.Num() > 0)
 	{
 		CurrentGrid->ResetPlaneTexture();
-		DrawPath(CurrentGrid, Path, AIPathColor);
+		DrawPath(CurrentGrid, Path, AIPathColor, true);
 		CachedOpenList.Empty();
 		CachedClosedList.Empty();
 		RunAStarIteratively = false;
 		return;
 	}
 
+	TArray<FAStarNode> ClosedListValues;
+	CachedClosedList.GenerateValueArray(ClosedListValues);
+	
 	TArray<FAStarNode>* CurrentArray = &CachedOpenList;
 	FColor CurrentColor = AIPathOpenColor;
 			
@@ -64,7 +67,7 @@ void AFGFlyingPlayer::Tick(float DeltaSeconds)
 			CurrentPath.Add(CurrentArray->GetData()[j].GridIndex);
 		}
 		DrawPath(CurrentGrid, CurrentPath, CurrentColor);
-		CurrentArray = &CachedClosedList;
+		CurrentArray = &ClosedListValues;
 		CurrentColor = AIPathClosedColor;
 	}
 }
@@ -129,18 +132,29 @@ void AFGFlyingPlayer::OnSelect()
 	}
 }
 
-void AFGFlyingPlayer::DrawPath(AFGGrid* Grid, TArray<int>& Path, FColor Color)
+void AFGFlyingPlayer::DrawPath(AFGGrid* Grid, TArray<int>& Path, FColor Color, bool DrawStartAndEnd)
 {
 	TArray<FColorIndexPair> ColorIndexPairs;
 	for(int i = 0; i < Path.Num(); i++)
 	{
 		const int CurrentIndex = Path[i];
-		if(CurrentIndex == IndexForStartPath || CurrentIndex == IndexForEndPath)
+		
+		if(CurrentIndex == IndexForStartPath)
+		{
+			if(!DrawStartAndEnd) continue;
+			ColorIndexPairs.Add(FColorIndexPair(CurrentIndex, AIPathStartColor));
 			continue;
+		}
+		if(CurrentIndex == IndexForEndPath)
+		{
+			if(!DrawStartAndEnd) continue;
+			ColorIndexPairs.Add(FColorIndexPair(CurrentIndex, AIPathEndColor));
+			continue;
+		}
 		
 		ColorIndexPairs.Add(FColorIndexPair(CurrentIndex, Color));
-		Grid->SetPixelsOnPlaneTexture(ColorIndexPairs);
 	}
+	Grid->SetPixelsOnPlaneTexture(ColorIndexPairs);
 }
 
 void AFGFlyingPlayer::OnToggleMouseLock()
